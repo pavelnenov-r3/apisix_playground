@@ -1,0 +1,134 @@
+networks:
+  app_network:
+    driver: bridge
+    name: apisix_services_network
+
+services:
+  # ETCD for APISIX
+  etcd:
+    image: bitnami/etcd:3.5
+    container_name: etcd-server
+    restart: always
+    volumes:
+      - etcd_data:/opt/bitnami/etcd/data
+    environment:
+      ALLOW_NONE_AUTHENTICATION: "yes"
+      ETCD_LISTEN_CLIENT_URLS: "http://0.0.0.0:2379"
+      ETCD_ADVERTISE_CLIENT_URLS: "http://etcd-server:2379"
+    ports:
+      - "12379:2379"
+      - "12380:2380"
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "etcdctl endpoint health --endpoints=http://127.0.0.1:2379 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Apache APISIX
+  apisix:
+    image: apache/apisix:3.12.0-debian
+    container_name: apisix-gateway
+    restart: always
+    depends_on:
+      etcd:
+        condition: service_healthy
+    volumes:
+      # Mount the custom config.yaml and logs directory
+      - ./apisix_conf/config.yaml:/usr/local/apisix/conf/config.yaml
+    environment:
+      # APISIX_ETCD_ENDPOINTS is still good to have, though config.yaml should take precedence for host
+      APISIX_ETCD_ENDPOINTS: "http://etcd-server:2379"
+      # APISIX_STAND_ALONE: "false" # Ensure it runs in traditional mode with etcd
+    ports:
+      - "9080:9080"
+      - "9443:9443"
+      - "9180:9180"
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -f http://localhost:9080/apisix/healthcheck || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  # PostgreSQL Database for Keycloak
+  postgres:
+    image: postgres:15
+    container_name: keycloak-db
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak -h localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  # Keycloak
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.4
+    container_name: keycloak-server
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - "start-dev"
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: keycloak-db
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: password
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_PORT: 8180
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8180:8180"
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8180/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # HTTPBin
+  httpbin:
+    image: kong/httpbin # Changed to kong/httpbin
+    container_name: httpbin-service
+    restart: always
+    ports:
+      - "8000:80"
+    networks:
+      - app_network
+    # platform: linux/arm64 # Uncomment if you are on ARM and need to specify, kong/httpbin is multi-arch
+
+  simple-echo-service:
+    image: mendhak/http-https-echo:29 # Using a specific tag for stability
+    container_name: simple-echo-service
+    restart: always
+    ports:
+      - "8081:8080" # Exposing on host port 8081, internal is 8080 (default for this image)
+    networks:
+      - app_network
+
+volumes:
+  etcd_data:
+  postgres_data:
+  apisix_logs:
