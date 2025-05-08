@@ -1,5 +1,10 @@
 # Project Documentation: API Security with Keycloak & Apache APISIX
 
+NOTE: This project follows https://apisix.apache.org/blog/2022/07/06/use-keycloak-with-api-gateway-to-secure-apis/
+Plugins configured:
+- `proxy-rewrite`: https://apisix.apache.org/docs/apisix/plugins/proxy-rewrite/
+- `openid-connect`: https://apisix.apache.org/docs/apisix/plugins/openid-connect/
+
 ## 1. Overview
 
 This document outlines the setup, configuration, and operational steps for securing APIs using Keycloak as the Identity and Access Management (IAM) solution and Apache APISIX as the API Gateway. It assumes you have a `docker-compose.yml` file that defines the necessary services (e.g., Apache APISIX, Keycloak, your backend services like `httpbin-service` and `simple-echo-service`).
@@ -53,12 +58,9 @@ Add the following line to your `/etc/hosts` file. You might need administrator/s
 4.  **View Logs (Optional)**: To view the logs for a specific service:
 
 ```bash
-
     docker-compose logs -f <service_name_in_compose_file>
-
-    \# Example: docker-compose logs -f apisix
-
-    \# Example: docker-compose logs -f keycloak
+    # Example: docker-compose logs -f apisix
+    # Example: docker-compose logs -f keycloak
 
 ```
 
